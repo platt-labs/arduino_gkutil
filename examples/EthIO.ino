@@ -74,7 +74,6 @@ void setup() {
     gk_modulation_setup();
     gk_listeners_setup();
     Serial.begin(BAUD_RATE);
-
 }
 
 void loop() {

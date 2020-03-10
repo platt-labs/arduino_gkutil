@@ -40,6 +40,33 @@ typedef gkPinValue gkPinReader(gkPin);
 #define GK_PIN_LEVEL_LOW 1
 #define GK_PIN_LEVEL_HIGH 2
 
+// Define number of ports based on the highest numbered one available.
+// The actual number of ports may be lower, e.g., PINA/PORTA is not defined
+// for ATmega328P. But the actual number of ports should be no higher than this.
+#if defined(PINL)
+#define GK_NUM_PORTS 12
+#elif defined(PINK)
+#define GK_NUM_PORTS 11
+#elif defined(PINJ)
+#define GK_NUM_PORTS 10
+#elif defined(PINI)
+#define GK_NUM_PORTS 9
+#elif defined(PINH)
+#define GK_NUM_PORTS 8
+#elif defined(PING)
+#define GK_NUM_PORTS 7
+#elif defined(PINF)
+#define GK_NUM_PORTS 6
+#elif defined(PINE)
+#define GK_NUM_PORTS 5
+#elif defined(PIND)
+#define GK_NUM_PORTS 4
+#elif defined(PINC)
+#define GK_NUM_PORTS 3
+#else
+#define GK_NUM_PORTS 2
+#endif
+
 void gk_setup(void);
 void gk_protect_serial_pins(void);
 

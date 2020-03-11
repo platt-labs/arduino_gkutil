@@ -18,19 +18,16 @@ extern "C" {
 
 #define LISTENER_EVENT_BUFFER_SIZE 20
 
-#define LISTENER_PIN_UNCHANGED 0
-#define LISTENER_PIN_SET_LOW   1
-#define LISTENER_PIN_SET_HIGH  2
-
 typedef uint8_t gkListener(gkPin, gkPinValue, gkTime);
 
 void gk_listeners_setup(void);
-void gk_listener_set(gkPin, gkListener*);
+void gk_listener_set(gkPin, gkListener);
 void gk_listener_clear(gkPin);
 // Update but do not execute listeners, return the number currently queued
 uint8_t gk_listeners_update(void);
+// Return the number currently queued without updating
 uint8_t gk_listeners_queued(void);
-// Execute currently queued listeners
+// Execute currently all queued listeners
 void gk_listeners_execute(void);
 
 #ifdef __cplusplus

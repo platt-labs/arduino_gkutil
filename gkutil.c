@@ -66,18 +66,29 @@ uint8_t gk_pin_read_simple(gkPin pin) {
     return !!(*portInputRegister(port) & bit);
 }
 
-void gk_reg_on(volatile uint8_t *reg, uint8_t bits) {
+void gk_reg_on(volatile uint8_t* reg, uint8_t bits) {
     *reg |= bits;
 }
 
-void gk_reg_off(volatile uint8_t *reg, uint8_t bits) {
+void gk_reg_off(volatile uint8_t* reg, uint8_t bits) {
     *reg &= ~bits;
 }
 
-void gk_reg_toggle(volatile uint8_t *reg, uint8_t bits) {
+void gk_reg_toggle(volatile uint8_t* reg, uint8_t bits) {
     *reg ^= bits;
 }
 
-void gk_reg_pass(volatile uint8_t *reg, uint8_t bits) {
+void gk_reg_pass(volatile uint8_t* reg, uint8_t bits) {
     return;
+}
+
+void gk_crc8_update(void* crc_in, uint8_t data) {
+    uint8_t* crc = (uint8_t*) crc_in;
+    for (uint8_t i=8; i; --i) {
+        uint8_t sum = (*crc ^ data) & 1;
+        *crc >>= 1;
+        data >>= 1;
+        if (sum)
+            *crc ^= 0x8C;
+    }
 }

@@ -131,6 +131,8 @@ gkRegSetter *const gk_reg_setters[] = {
 };
 #endif
 
+void gk_crc8_update(void*, uint8_t);
+
 #ifdef __cplusplus
 }
 #endif

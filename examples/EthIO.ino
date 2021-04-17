@@ -28,25 +28,47 @@
 // remain active)
 typedef bool CommandDispatcher(void);
 
-bool cmd_config_output_on();
-bool cmd_config_output_off();
+// <config_output_high> <pin>
+// Configure <pin> for output, and set its "resting" value to high
+bool cmd_config_output_high();
+// <config_output_low> <pin>
+// Configure <pin> for output, and set its "resting" value to low
+bool cmd_config_output_low();
+// <pulse> <pin> <dur1> <dur2>
+// Immediately toggle <pin>, then after word(<dur1>,<dur2>) ms, toggle it back
 bool cmd_pulse();
+// <pulse_train> <pin> <count> [<dur1> <dur2>]*
+// Immediately toggle <pin>, then schedule <count> more toggles to occur at
+// intervals defined by each pair of subsequent <dur> arguments, each pair
+// interpreted as word(<dur1>,<dur2>) ms
 bool cmd_pulse_train();
+// <config_input_pullup> <pin>
+// Configure <pin> for input, and activate its pullup resistor
 bool cmd_config_input_pullup();
+// <config_input_nopullup> <pin>
+// Configure <pin> for input, and deactivate its pullup resistor
 bool cmd_config_input_nopullup();
+// <read_pin> <pin>
+// Immediately check the input value on <pin> and send it to serial output
 bool cmd_read_pin();
+// <get_clock>
+// Send the current time of millis() to serial output.
 bool cmd_get_clock();
+// <get_last_clock>
+// Send the time at which the last pin write command was initiated to
+// serial output. This will correspond to the moment of the first pin value
+// toggle produced by the command (e.g., rising edge of pulse).
 bool cmd_get_last_clock();
-bool cmd_start_listening();
-bool cmd_stop_listening();
-bool cmd_set_data_rate();
-bool cmd_send_bytes();
-bool cmd_send_clock();
+//bool cmd_start_listening();
+//bool cmd_stop_listening();
+//bool cmd_set_data_rate();
+//bool cmd_send_bytes();
+//bool cmd_send_clock();
 
 CommandDispatcher*const dispatchers[] = {
     NULL,
-    cmd_config_output_on,
-    cmd_config_output_off,
+    cmd_config_output_high,
+    cmd_config_output_low,
     cmd_pulse,
     cmd_pulse_train,
     cmd_config_input_pullup,
@@ -54,14 +76,16 @@ CommandDispatcher*const dispatchers[] = {
     cmd_read_pin,
     cmd_get_clock,
     cmd_get_last_clock,
-    cmd_start_listening,
-    cmd_stop_listening,
+//    cmd_start_listening,
+//    cmd_stop_listening,
     cmd_set_data_rate,
     cmd_send_bytes,
-    cmd_send_clock,
+    cmd_send_clock
 };
 const byte num_commands = sizeof(dispatchers) / sizeof(dispatchers[0]);
 
+// State used to track the number of bytes that have been received in a
+// multi-byte command, and track time offsets for pulse scheduling
 byte command_byte_count = 0;
 gkTime command_received_time;
 gkTime command_initiated_time;
@@ -72,37 +96,40 @@ void setup() {
     gk_setup();
     gk_protect_serial_pins();
     gk_modulation_setup();
-    gk_listeners_setup();
+    //gk_listeners_setup();
     Serial.begin(BAUD_RATE);
 }
 
 void loop() {
-    byte cmd_byte;
     static CommandDispatcher active_command = NULL;
 
     // Perform any outputs according to the schedule
-    gk_schedule_check();
+    gk_schedule_execute();
 
-    // Handle commands
+    // If no command already in progress, check for a new command
     if (!active_command && Serial.available()) {
         // There is a command byte ready to read
         command_received_time = millis();
-        cmd_byte = Serial.read();
-        active_command = command_dispatchers[cmd_byte];
+        byte cmd_byte = Serial.read();
+        if (cmd_byte < num_commands)
+            active_command = command_dispatchers[cmd_byte];
+        else
+            active_command = NULL;
     }
+    // Run the currently active command, if it exists
     if (active_command && active_command())
-        // There is an active command to execute, and it finishes its work
+        // The command finished and can now be deactivated
         active_command = NULL;
 
     // Handle listeners
 
 }
 
-bool cmd_config_output_on() {
+bool cmd_config_output_high() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        config_pin(pin, MODE_OUT, PIN_ON);
+        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_SET_ON);
         command_initiated_time = millis();
         command_completed_time = command_initiated_time;
         command_last_time_scheduled = command_initiated_time;
@@ -111,11 +138,11 @@ bool cmd_config_output_on() {
     return false;
 }
 
-bool cmd_config_output_off() {
+bool cmd_config_output_low() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        config_pin(pin, MODE_OUT, PIN_OFF);
+        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_SET_OFF);
         command_initiated_time = millis();
         command_completed_time = command_initiated_time;
         command_last_time_scheduled = command_initiated_time;
@@ -130,7 +157,7 @@ bool cmd_pulse() {
 
     if (processing_step == 0 && Serial.available()) {
         pin = Serial.read();
-        set_pin(pin, PIN_TOGGLE);
+        gk_pin_write(pin, GK_PIN_SET_TOGGLE);
         command_initiated_time = millis();
         command_last_time_scheduled = command_initiated_time;
         ++step;
@@ -151,7 +178,7 @@ bool cmd_pulse_train() {
 
     if (processing_step == 0 && Serial.available()) {
         pin = Serial.read();
-        set_pin(pin, PIN_TOGGLE);
+        gk_pin_write(pin, GK_PIN_SET_TOGGLE);
         command_initiated_time = millis();
         command_last_time_scheduled = command_initiated_time;
         ++step;
@@ -173,15 +200,13 @@ bool cmd_pulse_train() {
 }
 
 uint8_t subcmd_pulses(uint8_t pin, uint8_t count) {
-    byte dur1, dur2;
     uint8_t num_processed = 0;
-    msTime next_pulse_time;
 
     while (count && Serial.available() >= 2) {
-        dur1 = Serial.read();
-        dur2 = Serial.read();
-        next_pulse_time = command_last_time_scheduled + word(dur1, dur2);
-        schedule_add(next_pulse_time, pin);
+        byte dur1 = Serial.read();
+        byte dur2 = Serial.read();
+        gkTime next_pulse_time = command_last_time_scheduled + word(dur1, dur2);
+        gk_schedule_add(next_pulse_time, pin);
         command_last_time_scheduled = next_pulse_time;
         count--;
         num_processed++;
@@ -194,7 +219,7 @@ bool cmd_config_input_pullup() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        config_pin(pin, MODE_IN, PULLUP_ON);
+        gk_pin_set_mode(pin, GK_PIN_MODE_INPUT, GK_PIN_PULLUP_ON);
         return true;
     }
     return false;
@@ -204,7 +229,7 @@ bool cmd_config_input_nopullup() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        config_pin(pin, MODE_IN, PULLUP_OFF);
+        gk_pin_set_mode(pin, GK_PIN_MODE_INPUT, GK_PIN_PULLUP_OFF);
         return true;
     }
     return false;
@@ -223,7 +248,7 @@ bool cmd_read_pin() {
 }
 
 bool cmd_get_clock() {
-    msTime time = millis();
+    gkTime time = millis();
     Serial.write((uint8_t*)&time, sizeof(time));
 }
 
@@ -233,8 +258,8 @@ bool cmd_get_last_clock() {
         sizeof(command_initiated_time) );
 }
 
-bool cmd_start_listening();
-bool cmd_stop_listening();
-bool cmd_set_data_rate();
-bool cmd_send_bytes();
-bool cmd_send_clock();
+//bool cmd_start_listening();
+//bool cmd_stop_listening();
+//bool cmd_set_data_rate();
+//bool cmd_send_bytes();
+//bool cmd_send_clock();

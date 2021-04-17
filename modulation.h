@@ -1,8 +1,7 @@
 /* modulation.h
-
-Alternatives to the Arduino pinMode, digitalRead, and digitalWrite i/o functions
-for (possible) use with a modulated oscillator pin.
-
+Digital pin I/O functions (mode set, read, and write) for using a PWM pin as a
+modulated I/O pin. This can, for example, allow the digital output of a pin to
+be modulated on a carrier wave for use with infrared communications.
 */
 #ifndef MODULATION_H
 #define MODULATION_H

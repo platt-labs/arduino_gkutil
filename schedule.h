@@ -1,5 +1,5 @@
 /* schedule.h
-
+Allow digital outputs to be "scheduled" to a millisecond-precision clock.
 */
 
 #ifndef SCHEDULE_H
@@ -31,10 +31,25 @@ EXTERN struct OutputSchedule {
     uint8_t length;
 } sched;
 
-void gk_schedule_add(gkTime, gkPin, gkPinAction);
-void gk_schedule_check();
-void gk_schedule_write_byte(gkTime, gkPin, gkTime, gkTime, uint8_t);
-void gk_schedule_write_bytes(gkTime, gkPin, gkTime, gkTime, uint8_t, uint8_t*);
+// Schedule a digital write action to be executed when millis()>=time.
+void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action);
+// Check the schedule and perform any write actions that are due
+void gk_schedule_execute();
+// Perform a low-bitrate serial write, to begin when millis()>=time
+void gk_schedule_write_byte(
+    gkTime time,
+    gkPin pin,
+    gkTime bit_interval,
+    gkTime bit_width,
+    uint8_t value
+);
+void gk_schedule_write_bytes(
+    gkTime time,
+    gkPin pin,
+    gkTime bit_interval,
+    gkTime bit_width,
+    uint8_t count,
+    uint8_t* value);
 
 #ifdef __cplusplus
 }

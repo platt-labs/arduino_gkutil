@@ -1,3 +1,17 @@
+/* gkutil.h
+An alternative approach for interacting with an Arduino, for use in behavioral
+research. In general, if the standard Arduino library meets your needs, use
+that instead! This library provides replacements for the basic pin I/O functions
+which are intended to act a bit more flexibly for some of the standard needs
+of behavioral research (e.g., precise timing).
+
+Using both these functions and the standard Arduino digitalRead/digitalWrite
+functions in the same sketch probably isn't a good idea. At the very least it
+will cause the compiler/linker to generate code for both sets of functions,
+producing a larger-than-necessary amount of program memory to be used on the
+Arduino.
+*/
+
 #ifndef GKUTIL_H
 #define GKUTIL_H
 
@@ -12,6 +26,7 @@ extern "C" {
 #define EXTERN extern
 #endif
 
+// Basic type aliases
 typedef uint8_t gkPin;
 typedef uint8_t gkPinValue;
 typedef uint8_t gkPort;
@@ -19,6 +34,10 @@ typedef uint8_t gkPinMode;
 typedef uint8_t gkPinAction;
 typedef unsigned long gkTime;
 
+// Type definition for functions manipulating the digital I/O pins. Changing
+// the mode setter, writer, and reader functions for a pin allows its behavior
+// during all I/O operations to be altered; e.g., for the digital signal to be
+// controlled by a PWM signal.
 typedef void gkPinModeSetter(gkPin, gkPinMode, gkPinAction);
 typedef void gkPinWriter(gkPin, gkPinAction);
 typedef gkPinValue gkPinReader(gkPin);
@@ -67,19 +86,23 @@ typedef gkPinValue gkPinReader(gkPin);
 #define GK_NUM_PORTS 2
 #endif
 
+// Set up the gkutil library
 void gk_setup(void);
+// Prevents accidental changes to the pins used for serial I/O with a computer
 void gk_protect_serial_pins(void);
 
+// Basic digital I/O functions. Will call the individual I/O handler function
+// for the specific pin requested.
 void gk_pin_set_mode(gkPin, gkPinMode, gkPinAction);
 void gk_pin_write(gkPin, gkPinAction);
 gkPinValue gk_pin_read(gkPin);
 
-// Default pin handlers
+// Default pin digital I/O handlers
 void gk_pin_set_mode_simple(gkPin, gkPinMode, gkPinAction);
 void gk_pin_write_simple(gkPin, gkPinAction);
 gkPinValue gk_pin_read_simple(gkPin);
 
-// Tables of pin handlers
+// Tables of pin digital I/O handlers
 EXTERN gkPinModeSetter* gk_pin_mode_setters[NUM_DIGITAL_PINS];
 EXTERN gkPinWriter* gk_pin_writers[NUM_DIGITAL_PINS];
 EXTERN gkPinReader* gk_pin_readers[NUM_DIGITAL_PINS];

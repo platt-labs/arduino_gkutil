@@ -35,7 +35,7 @@ void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
     }
 }
 
-void gk_schedule_check() {
+void gk_schedule_execute() {
     ScheduledEvent* next_item = &(sched.buffer[sched.head]);
 
     while (sched.length && next_item->time <= millis()) {
@@ -60,16 +60,16 @@ void gk_schedule_write_byte(
     gk_schedule_write_bytes(when, pin, bit_interval, bit_width, 1, &value);
 }
 
-void gk_schedule_write_bytes(
-        gkTime when,
-        gkPin pin,
-        gkTime bit_interval,
-        gkTime bit_width,
-        uint8_t count,
-        uint8_t* value ) {
-    gk_schedule_write_bytes_with_checksum(
-        when, pin, bit_interval, bit_width, count, value, /* generic checksum?*/
-}
+//void gk_schedule_write_bytes(
+//        gkTime when,
+//        gkPin pin,
+//        gkTime bit_interval,
+//        gkTime bit_width,
+//        uint8_t count,
+//        uint8_t* value ) {
+//    gk_schedule_write_bytes_with_checksum(
+//        when, pin, bit_interval, bit_width, count, value, /* generic checksum?*/
+//}
 
 // Write a series of bits to communicate information, using a simplistic
 // protocol. Each bit consists of either a 1 waveform (bit_width ms ON

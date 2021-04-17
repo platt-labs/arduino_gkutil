@@ -19,6 +19,10 @@ int modulator_threshold_b = 0;
     gk_reg_setters[level](&TCCR2A, _BV(COM2B1));    \
 }
 #else
+// The CONFIGURE_TIMER_REGISTERS macro needs to be set differently depending
+// upon which hardware timer is being used for the modulated pin. For most
+// Arduino boards this is going to be TIMER2B, but others are possible.
+// TODO: support other timers.
 #error Timer not supported.
 #endif
 
@@ -36,7 +40,7 @@ void gk_modulation_setup(void) {
     uint8_t pin_port = digitalPinToPort(pin);
     uint8_t pin_bit = digitalPinToBitMask(pin);
     volatile uint8_t* mode_reg = portModeRegister(pin_port);
-	volatile uint8_t* out_reg = portOutputRegister(pin_port);
+    volatile uint8_t* out_reg = portOutputRegister(pin_port);
 
     gkPinMode orig_mode = (*mode_reg & pin_bit) ?
             GK_PIN_MODE_OUTPUT : GK_PIN_MODE_INPUT;

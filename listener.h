@@ -1,4 +1,5 @@
-
+// This is an experimental interface for implementing digital input "listener"
+// callbacks, but I'm not sure this is going to remain.
 
 #ifndef LISTENER_H
 #define LISTENER_H

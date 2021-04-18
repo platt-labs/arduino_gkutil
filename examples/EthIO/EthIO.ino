@@ -17,11 +17,13 @@
 // period of time
 
 #include <gkutil.h>
-#include <modulation.h>
-#include <schedule.h>
-#include <listener.h>
+#include <gkutil/modulation.h>
+#include <gkutil/schedule.h>
+//#include <gkutil/listener.h>
 
 #define BAUD_RATE 115200
+
+int serial_write_bigendian(uint8_t* value, int size);
 
 // A command dispatcher is a function taking no arguments and returning a
 // boolean true (if the command is completed) or false (if the command needs to
@@ -64,6 +66,7 @@ bool cmd_get_last_clock();
 //bool cmd_set_data_rate();
 //bool cmd_send_bytes();
 //bool cmd_send_clock();
+bool cmd_get_schedule_size();
 
 CommandDispatcher*const dispatchers[] = {
     NULL,
@@ -78,9 +81,10 @@ CommandDispatcher*const dispatchers[] = {
     cmd_get_last_clock,
 //    cmd_start_listening,
 //    cmd_stop_listening,
-    cmd_set_data_rate,
-    cmd_send_bytes,
-    cmd_send_clock
+//    cmd_set_data_rate,
+//    cmd_send_bytes,
+//    cmd_send_clock,
+    cmd_get_schedule_size,
 };
 const byte num_commands = sizeof(dispatchers) / sizeof(dispatchers[0]);
 
@@ -98,10 +102,11 @@ void setup() {
     gk_modulation_setup();
     //gk_listeners_setup();
     Serial.begin(BAUD_RATE);
+    Serial.write("Reporting for duty");
 }
 
 void loop() {
-    static CommandDispatcher active_command = NULL;
+    static CommandDispatcher* active_command = NULL;
 
     // Perform any outputs according to the schedule
     gk_schedule_execute();
@@ -112,7 +117,7 @@ void loop() {
         command_received_time = millis();
         byte cmd_byte = Serial.read();
         if (cmd_byte < num_commands)
-            active_command = command_dispatchers[cmd_byte];
+            active_command = dispatchers[cmd_byte];
         else
             active_command = NULL;
     }
@@ -155,15 +160,15 @@ bool cmd_pulse() {
     static uint8_t pin;
     static uint8_t step = 0;
 
-    if (processing_step == 0 && Serial.available()) {
+    if (step == 0 && Serial.available()) {
         pin = Serial.read();
         gk_pin_write(pin, GK_PIN_SET_TOGGLE);
         command_initiated_time = millis();
         command_last_time_scheduled = command_initiated_time;
         ++step;
     }
-    if (processing_step == 1) {
-        if (!subcmd_pulses(pin, 1)) {
+    if (step == 1) {
+        if (subcmd_pulses(pin, 1)) {
             command_completed_time = command_last_time_scheduled;
             step = 0;
             return true;
@@ -176,18 +181,18 @@ bool cmd_pulse_train() {
     static uint8_t pin, num;
     static uint8_t step = 0;
 
-    if (processing_step == 0 && Serial.available()) {
+    if (step == 0 && Serial.available()) {
         pin = Serial.read();
         gk_pin_write(pin, GK_PIN_SET_TOGGLE);
         command_initiated_time = millis();
         command_last_time_scheduled = command_initiated_time;
         ++step;
     }
-    if (processing_step == 1 && Serial.available()) {
+    if (step == 1 && Serial.available()) {
         num = Serial.read();
         ++step;
     }
-    if (processing_step == 2) {
+    if (step == 2) {
         num -= subcmd_pulses(pin, num);
         if (num == 0) {
             // All pulses were processed
@@ -201,12 +206,18 @@ bool cmd_pulse_train() {
 
 uint8_t subcmd_pulses(uint8_t pin, uint8_t count) {
     uint8_t num_processed = 0;
+    //Serial.print("subcmd_pulses ");
+    //Serial.print(pin);
+    //Serial.print(" ");
+    //Serial.println(count);
 
     while (count && Serial.available() >= 2) {
         byte dur1 = Serial.read();
         byte dur2 = Serial.read();
         gkTime next_pulse_time = command_last_time_scheduled + word(dur1, dur2);
-        gk_schedule_add(next_pulse_time, pin);
+        gk_schedule_add(next_pulse_time, pin, GK_PIN_SET_TOGGLE);
+        //Serial.print("add schedule ");
+        //Serial.println(sched.buffer[sched.head].time);
         command_last_time_scheduled = next_pulse_time;
         count--;
         num_processed++;
@@ -240,7 +251,7 @@ bool cmd_read_pin() {
     bool value;
     if (Serial.available()) {
         pin = Serial.read();
-        value = read_pin(pin);
+        value = gk_pin_read(pin);
         Serial.write(value);
         return true;
     }
@@ -249,13 +260,20 @@ bool cmd_read_pin() {
 
 bool cmd_get_clock() {
     gkTime time = millis();
-    Serial.write((uint8_t*)&time, sizeof(time));
+    //Serial.write((uint8_t*)&time, sizeof(time));
+    serial_write_bigendian((uint8_t*)&time, sizeof(time));
 }
 
 bool cmd_get_last_clock() {
-    Serial.write(
-        (uint8_t*)&command_initiated_time,
-        sizeof(command_initiated_time) );
+    //Serial.write(
+    //    (uint8_t*)&command_initiated_time,
+    //    sizeof(command_initiated_time)
+    //);
+    serial_write_bigendian((uint8_t*)&command_initiated_time, sizeof(command_initiated_time));
+}
+
+bool cmd_get_schedule_size() {
+    Serial.write(gk_schedule_size());
 }
 
 //bool cmd_start_listening();
@@ -263,3 +281,10 @@ bool cmd_get_last_clock() {
 //bool cmd_set_data_rate();
 //bool cmd_send_bytes();
 //bool cmd_send_clock();
+
+int serial_write_bigendian(uint8_t* value, int size) {
+    for (int i = size-1; i >= 0; i--) {
+        Serial.write(value[i]);
+    }
+    return size;
+}

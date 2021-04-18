@@ -35,6 +35,19 @@ void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
     }
 }
 
+uint8_t gk_schedule_size() {
+    return sched.length;
+}
+
+ScheduledEvent*const gk_schedule_get(uint8_t n) {
+    if (n < sched.length) {
+        uint8_t item_index = SCHEDULE_BUFFER_IND(n);
+        return &(sched.buffer[item_index]);
+    } else {
+        return NULL;
+    }
+}
+
 void gk_schedule_execute() {
     ScheduledEvent* next_item = &(sched.buffer[sched.head]);
 

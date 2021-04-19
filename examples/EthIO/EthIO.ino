@@ -102,7 +102,6 @@ void setup() {
     gk_modulation_setup();
     //gk_listeners_setup();
     Serial.begin(BAUD_RATE);
-    Serial.write("Reporting for duty");
 }
 
 void loop() {

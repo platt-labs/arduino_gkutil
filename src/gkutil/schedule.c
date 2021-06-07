@@ -5,7 +5,7 @@
 
 #define SCHEDULE_BUFFER_IND(x) ((sched.head + (x)) % SCHEDULE_BUFFER_SIZE)
 
-void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
+uint8_t gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
     ScheduledEvent new_item = {time, pin, action};
     uint8_t current_length = sched.length;
 
@@ -27,11 +27,13 @@ void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
         }
         sched.buffer[insertion_point] = new_item;
         sched.length += 1;
+        return i+1;
     } else {
         // No items scheduled, this is the new start
         sched.buffer[0] = new_item;
         sched.head = 0;
         sched.length = 1;
+        return 0;
     }
 }
 
@@ -46,6 +48,19 @@ ScheduledEvent*const gk_schedule_get(uint8_t n) {
     } else {
         return NULL;
     }
+}
+
+void gk_schedule_remove(uint8_t n) {
+    uint8_t current_length = sched.length;
+    if (n >= current_length)
+        return;
+    for (int i = n; i < current_length-1; i++) {
+        // Copy the next item in the buffer to the current item
+        uint8_t buffer_this_ind = SCHEDULE_BUFFER_IND(i);
+        uint8_t buffer_next_ind = SCHEDULE_BUFFER_IND(i+1);
+        sched.buffer[buffer_this_ind] = sched.buffer[buffer_next_ind];
+    }
+    sched.length -= 1;
 }
 
 void gk_schedule_execute() {

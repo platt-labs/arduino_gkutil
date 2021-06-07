@@ -5,6 +5,7 @@ commands = [
     'config_output_low',
     'pulse',
     'pulse_train',
+    'pulse_after',
     'config_input_pullup',
     'config_input_nopullup',
     'read_pin',
@@ -43,6 +44,13 @@ class EthIO:
     def pulse(self, pin, duration):
         msg = msg_start['pulse']
         msg += pin.to_bytes(1, byteorder='big')
+        msg += duration.to_bytes(2, byteorder='big')
+        self.device.write(msg)
+
+    def pulse_after(self, pin, duration, after=10):
+        msg = msg_start['pulse_after']
+        msg += pin.to_bytes(1, byteorder='big')
+        msg += after.to_bytes(2, byteorder='big')
         msg += duration.to_bytes(2, byteorder='big')
         self.device.write(msg)
 

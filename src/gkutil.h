@@ -89,7 +89,10 @@ typedef gkPinValue gkPinReader(gkPin);
 // Set up the gkutil library
 void gk_setup(void);
 // Prevents accidental changes to the pins used for serial I/O with a computer
-void gk_protect_serial_pins(void);
+//void gk_protect_serial_pins(void);
+
+// Reconfigure the pin to use either normal or inverted logic
+void gk_configure_pin(gkPin, bool);
 
 // Basic digital I/O functions. Will call the individual I/O handler function
 // for the specific pin requested.
@@ -101,6 +104,11 @@ gkPinValue gk_pin_read(gkPin);
 void gk_pin_set_mode_simple(gkPin, gkPinMode, gkPinAction);
 void gk_pin_write_simple(gkPin, gkPinAction);
 gkPinValue gk_pin_read_simple(gkPin);
+
+// Inverted-logic pin digital I/O handlers
+void gk_pin_set_mode_inverted(gkPin, gkPinMode, gkPinAction);
+void gk_pin_write_inverted(gkPin, gkPinAction);
+gkPinValue gk_pin_read_inverted(gkPin);
 
 // Tables of pin digital I/O handlers
 EXTERN gkPinModeSetter* gk_pin_mode_setters[NUM_DIGITAL_PINS];
@@ -144,12 +152,19 @@ void gk_reg_pass(volatile uint8_t* reg, uint8_t bits);
 
 #ifndef GKUTIL_GLOBAL
 extern gkRegSetter*const gk_reg_setters[4];
+extern gkRegSetter*const gk_reg_setters_inverted[4];
 #else
 // Expose the definition of this const array here in the header for readability
 gkRegSetter *const gk_reg_setters[] = {
     &gk_reg_pass,
     &gk_reg_off,
     &gk_reg_on,
+    &gk_reg_toggle,
+};
+gkRegSetter *const gk_reg_setters_inverted[] = {
+    &gk_reg_pass,
+    &gk_reg_on,
+    &gk_reg_off,
     &gk_reg_toggle,
 };
 #endif

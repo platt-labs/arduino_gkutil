@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 // Maximum number of scheduled digital output events to queue
-#define SCHEDULE_BUFFER_SIZE 100
+#define SCHEDULE_BUFFER_SIZE 256
 
 #ifdef SCHEDULE_GLOBAL
 #define EXTERN
@@ -32,11 +32,15 @@ EXTERN struct OutputSchedule {
 } sched;
 
 // Schedule a digital write action to be executed when millis()>=time.
-void gk_schedule_add(gkTime time, gkPin pin, gkPinAction action);
+// Returns the (current) index of the scheduled event, but note that this may
+// change after calling gk_schedule_execute
+uint8_t gk_schedule_add(gkTime time, gkPin pin, gkPinAction action);
 // Get the number of actions currently scheduled
 uint8_t gk_schedule_size();
 // Get the n'th event scheduled
 ScheduledEvent*const gk_schedule_get(uint8_t n);
+// Remove the n'th event scheduled
+void gk_schedule_remove(uint8_t n);
 // Check the schedule and perform any write actions that are due
 void gk_schedule_execute();
 // Perform a low-bitrate serial write, to begin when millis()>=time

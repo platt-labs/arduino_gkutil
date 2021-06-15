@@ -19,17 +19,13 @@ extern "C" {
 #define EXTERN extern
 #endif
 
-typedef struct ScheduledEvent {
+typedef struct gkScheduledEvent {
     gkTime time;
     gkPin pin;
     gkPinAction action;
-} ScheduledEvent;
+} gkScheduledEvent;
 
-EXTERN struct OutputSchedule {
-    ScheduledEvent buffer[SCHEDULE_BUFFER_SIZE];
-    uint8_t head;
-    uint8_t length;
-} sched;
+typedef struct gkScheduleNode *gkScheduleIterator;
 
 // Schedule a digital write action to be executed when millis()>=time.
 // Returns the (current) index of the scheduled event, but note that this may
@@ -38,9 +34,14 @@ uint8_t gk_schedule_add(gkTime time, gkPin pin, gkPinAction action);
 // Get the number of actions currently scheduled
 uint8_t gk_schedule_size();
 // Get the n'th event scheduled
-ScheduledEvent*const gk_schedule_get(uint8_t n);
+//gkScheduledEvent*const gk_schedule_get(uint8_t n);
 // Remove the n'th event scheduled
-void gk_schedule_remove(uint8_t n);
+gkScheduleIterator gk_schedule_head();
+gkScheduleIterator gk_schedule_tail();
+gkScheduleIterator gk_schedule_next(gkScheduleIterator);
+gkScheduleIterator gk_schedule_prev(gkScheduleIterator);
+gkScheduledEvent *const gk_schedule_get(gkScheduleIterator);
+void gk_schedule_remove(gkScheduleIterator);
 // Check the schedule and perform any write actions that are due
 void gk_schedule_execute();
 // Perform a low-bitrate serial write, to begin when millis()>=time

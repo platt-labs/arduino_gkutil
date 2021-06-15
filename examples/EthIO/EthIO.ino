@@ -23,8 +23,6 @@
 
 #define BAUD_RATE 115200
 
-uint8_t pin_output_inverted[GK_NUM_PINS] = {0};
-
 int serial_write_bigendian(uint8_t* value, int size);
 
 // A command dispatcher is a function taking no arguments and returning a
@@ -33,12 +31,12 @@ int serial_write_bigendian(uint8_t* value, int size);
 typedef bool CommandDispatcher(void);
 
 // <config_output_high> <pin>
-// Configure <pin> for output, and set its "resting" value to high
-bool cmd_config_output_high();
+// Configure <pin> for output
+bool cmd_config_output();
 
 // <config_output_low> <pin>
-// Configure <pin> for output, and set its "resting" value to low
-bool cmd_config_output_low();
+// Configure <pin> for inverted logic output (on=low, off=high)
+bool cmd_config_output_inverted();
 
 // <pulse> <pin> <dur1> <dur2>
 // Immediately toggle <pin>, then after word(<dur1>,<dur2>) ms, toggle it back
@@ -86,10 +84,19 @@ bool cmd_get_last_clock();
 //bool cmd_send_clock();
 bool cmd_get_schedule_size();
 
+bool invert_pin_output[GK_NUM_PINS] = {false};
+
+#define PIN_ON_VALUE(pin) ( \
+    invert_pin_output[pin] ? GK_PIN_WRITE_OFF : GK_PIN_WRITE_ON \
+)
+#define PIN_OFF_VALUE(pin) ( \
+    invert_pin_output[pin] ? GK_PIN_WRITE_ON : GK_PIN_WRITE_OFF \
+)
+
 CommandDispatcher*const dispatchers[] = {
     NULL,
-    cmd_config_output_high,
-    cmd_config_output_low,
+    cmd_config_output,
+    cmd_config_output_inverted,
     cmd_pulse,
     cmd_pulse_train,
     cmd_pulse_after,
@@ -117,10 +124,15 @@ gkTime command_time_completed;
 
 void setup() {
     gk_setup();
+    for (uint8_t pin=2; pin<GK_NUM_PINS; ++pin) {
+        gk_pin_configure_simple(pin);
+    }
+
     //gk_protect_serial_pins();
-    gk_modulation_setup();
+    //gk_modulation_setup();
     //gk_listeners_setup();
     Serial.begin(BAUD_RATE);
+    Serial.println("READY");
 }
 
 void loop() {
@@ -148,13 +160,12 @@ void loop() {
 
 }
 
-bool cmd_config_output_high() {
+bool cmd_config_output() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        pin_output_inverted[pin] = 1;
-        gk_configure_pin(pin, true);
-        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_SET_OFF);
+        invert_pin_output[pin] = false;
+        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_WRITE_OFF);
         command_time_initiated = millis();
         command_time_completed = command_time_initiated;
         command_time_last_scheduled = command_time_initiated;
@@ -163,13 +174,12 @@ bool cmd_config_output_high() {
     return false;
 }
 
-bool cmd_config_output_low() {
+bool cmd_config_output_inverted() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        pin_output_inverted[pin] = 0;
-        gk_configure_pin(pin, false);
-        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_SET_OFF);
+        invert_pin_output[pin] = true;
+        gk_pin_set_mode(pin, GK_PIN_MODE_OUTPUT, GK_PIN_WRITE_ON);
         command_time_initiated = millis();
         command_time_completed = command_time_initiated;
         command_time_last_scheduled = command_time_initiated;
@@ -185,7 +195,7 @@ bool cmd_pulse() {
     if (step == 0 && Serial.available()) {
         // Read which pin to pulse, and immediately turn it on
         pin = Serial.read();
-        gk_pin_write(pin, GK_PIN_SET_ON);
+        gk_pin_write(pin, PIN_ON_VALUE(pin));
         // Update scheduling time steps
         command_time_initiated = millis();
         command_time_last_scheduled = command_time_initiated;
@@ -194,9 +204,15 @@ bool cmd_pulse() {
     if (step == 1 && Serial.available() >= 2) {
         // Read for how long the pin is to remain on, and schedule turning
         // it off
-        short duration = word(Serial.read(), Serial.read());
+        uint8_t b1 = Serial.read();
+        uint8_t b2 = Serial.read();
+        unsigned short duration = word(b1, b2);
         command_time_last_scheduled += duration;
-        gk_schedule_add(command_time_last_scheduled, pin, GK_PIN_SET_OFF);
+        gk_schedule_add(
+            command_time_last_scheduled,
+            pin,
+            PIN_OFF_VALUE(pin)
+        );
         // Update the time at which the last event from this command will be
         // completed, reset the state of this command reader, and report
         // that the command has been completely read.
@@ -220,20 +236,24 @@ bool cmd_pulse_after() {
         // Read for how long to delay before turning the pin on, then determine
         // whether that delay begins from when this command was received or
         // from the end of an already-scheduled action on that pin.
-        short delay = word(Serial.read(), Serial.read());
+        uint8_t b1 = Serial.read();
+        uint8_t b2 = Serial.read();
+        unsigned short delay = word(b1, b2);
         // Check for the last scheduled event on this pin
-        uint8_t schedule_length = gk_schedule_size();
         command_time_initiated = command_time_received;
-        for (int i = gk_schedule_size(); i >= 0; i--) {
-            // Starting from the last scheduled action, check to see if any
-            // of them refer to this pin. If one does then work from it.
-            if (gk_schedule_get(i)->pin == pin) {
-                command_time_initiated = gk_schedule_get(i)->time;
+        gkScheduleIterator iter = gk_schedule_tail();
+        while (iter) {
+            gkScheduledEvent *const event = gk_schedule_get(iter);
+            if (event->pin == pin) {
+                command_time_initiated = event->time;
                 break;
+            } else {
+                iter = gk_schedule_prev(iter);
             }
         }
+
         command_time_initiated += delay;
-        gk_schedule_add(command_time_initiated, pin, GK_PIN_SET_ON);
+        gk_schedule_add(command_time_initiated, pin, PIN_ON_VALUE(pin));
         // Update the scheduling time steps
         command_time_last_scheduled = command_time_initiated;
         ++step;
@@ -241,9 +261,11 @@ bool cmd_pulse_after() {
     if (step == 2 && Serial.available() >= 2) {
         // Read for how long to delay before turning the pin off, and schedule
         // that following the turn on.
-        short duration = word(Serial.read(), Serial.read());
+        uint8_t b1 = Serial.read();
+        uint8_t b2 = Serial.read();
+        unsigned short duration = word(b1, b2);
         command_time_last_scheduled += duration;
-        gk_schedule_add(command_time_last_scheduled, pin, GK_PIN_SET_OFF);
+        gk_schedule_add(command_time_last_scheduled, pin, PIN_OFF_VALUE(pin));
         // Clean up and report that the command has been processed.
         command_time_completed = command_time_last_scheduled;
         step = 0;
@@ -260,7 +282,7 @@ bool cmd_pulse_train() {
         // Read which pin we're scheduling a train for and begin by turning it
         // on.
         pin = Serial.read();
-        gk_pin_write(pin, GK_PIN_SET_ON);
+        gk_pin_write(pin, PIN_ON_VALUE(pin));
         command_time_initiated = millis();
         command_time_last_scheduled = command_time_initiated;
         ++step;
@@ -283,11 +305,13 @@ bool cmd_pulse_train() {
     if (step == 2) {
         // Read a total of 2N-1 delay intervals, each 2 bytes
         while (num_to_process && Serial.available() >= 2) {
-            short delay = word(Serial.read(), Serial.read());
+            uint8_t b1 = Serial.read();
+            uint8_t b2 = Serial.read();
+            unsigned short delay = word(b1, b2);
             // If num_to_process is odd, we are scheduling the pin to turn off;
             // if even, we're scheduling it on.
             gkPinAction action =
-                (num_to_process % 2) ? GK_PIN_SET_OFF : GK_PIN_SET_ON;
+                (num_to_process % 2) ? PIN_OFF_VALUE(pin) : PIN_ON_VALUE(pin);
             command_time_last_scheduled += delay;
             gk_schedule_add(command_time_last_scheduled, pin, action);
             --num_to_process;
@@ -308,8 +332,6 @@ bool cmd_config_input_pullup() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        // Make sure we're not using inverted logic:
-        gk_configure_pin(pin, false);
         gk_pin_set_mode(pin, GK_PIN_MODE_INPUT, GK_PIN_PULLUP_ON);
         return true;
     }
@@ -320,7 +342,6 @@ bool cmd_config_input_nopullup() {
     uint8_t pin;
     if (Serial.available()) {
         pin = Serial.read();
-        gk_configure_pin(pin, false);
         gk_pin_set_mode(pin, GK_PIN_MODE_INPUT, GK_PIN_PULLUP_OFF);
         return true;
     }

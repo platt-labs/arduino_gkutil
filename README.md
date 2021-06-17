@@ -310,5 +310,8 @@ A `gkPinModeSetter` for a modulated pin.
 #### `void gk_pin_write_modulator(gkPin, gkPinAction)`
 A `gkPinWriter` for a modulated pin.
 
+#### `void gk_pin_configure_modulator(gkPin pin)`
+Configure a pin for modulated output behavior, using the functions `gk_pin_set_mode_modulator`, `gk_pin_write_modulator`, and `gk_pin_read_simple`. *(Implemented as a macro calling `gk_pin_configure`.)*
+
 ## `gkutil/listener.h`
 A header providing utilities to scan inputs for changes and take actions based on those changes. **The implementation of this section is not yet complete.**

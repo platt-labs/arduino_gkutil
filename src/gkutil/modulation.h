@@ -36,6 +36,14 @@ void gk_modulation_setup(void);
 void gk_pin_set_mode_modulator(gkPin, gkPinMode, gkPinAction);
 void gk_pin_write_modulator(gkPin, gkPinAction);
 
+#define gk_pin_configure_modulator(pin) \
+    gk_pin_configure( \
+        pin, \
+        gk_pin_set_mode_modulator, \
+        gk_pin_write_modulator, \
+        gk_pin_read_simple \
+    )
+
 #ifdef __cplusplus
 }
 #endif

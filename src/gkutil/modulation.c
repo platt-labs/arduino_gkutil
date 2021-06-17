@@ -59,10 +59,12 @@ void gk_modulation_setup(void) {
     CONFIGURE_TIMER_REGISTERS;
     SREG = SREG_orig;
 
+    gk_pin_configure_modulator(pin);
+/*
     gk_pin_set_mode_setter(pin, &gk_pin_set_mode_modulator);
     gk_pin_set_writer(pin, &gk_pin_write_modulator);
     gk_pin_set_reader(pin, &gk_pin_read_simple);
-
+*/
     gk_pin_set_mode_modulator(pin, orig_mode, orig_level);
 }
 

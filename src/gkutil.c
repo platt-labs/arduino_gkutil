@@ -4,37 +4,32 @@
 #undef GKUTIL_GLOBAL
 
 void gk_setup(void) {
-    for (gkPin pin=0; pin < GK_NUM_PINS; ++pin) {
-        gk_configure_pin(pin, false);
-    }
+    // We don't actually need to do anything here
 }
 
-void gk_configure_pin(gkPin pin, bool inverted) {
-    if (pin < 2) {
-        // We presume that pins 0 and 1 are reserved for serial communication
-        // with a computer. If not, they can still be used, but should be
-        // configured manually; this is just to make things a bit safer.
-        gk_pin_mode_setters[pin] = (void*)0;
-        gk_pin_writers[pin] = (void*)0;
-        gk_pin_readers[pin] = (void*)0;
-    } else if (inverted) {
-        gk_pin_mode_setters[pin] = &gk_pin_set_mode_inverted;
-        gk_pin_writers[pin] = &gk_pin_write_inverted;
-        gk_pin_readers[pin] = &gk_pin_read_inverted;
-    } else {
-        gk_pin_mode_setters[pin] = &gk_pin_set_mode_simple;
-        gk_pin_writers[pin] = &gk_pin_write_simple;
-        gk_pin_readers[pin] = &gk_pin_read_simple;
-    }
+void gk_pin_configure(
+    gkPin pin,
+    gkPinModeSetter *setter,
+    gkPinWriter *writer,
+    gkPinReader *reader
+) {
+    gk_pin_mode_setters[pin] = setter;
+    gk_pin_writers[pin] = writer;
+    gk_pin_readers[pin] = reader;
+}
+/*
+void gk_pin_configure_simple(gkPin pin) {
+    gk_pin_set_mode_setter(pin, &gk_pin_set_mode_simple);
+    gk_pin_set_writer(pin, &gk_pin_write_simple);
+    gk_pin_set_reader(pin, &gk_pin_read_simple);
 }
 
-//void gk_protect_serial_pins(void) {
-//    for (gkPin pin = 0; pin < 2; ++pin) {
-//        gk_pin_set_mode_setter(pin, (void*)0 );
-//        gk_pin_set_writer(pin, (void*)0 );
-//        gk_pin_set_reader(pin, (void*)0 );
-//  }
-//}
+void gk_pin_configure_disabled(gkPin pin) {
+    gk_pin_set_mode_setter(pin, (void*)0);
+    gk_pin_set_writer(pin, (void*)0);
+    gk_pin_set_reader(pin, (void*)0);
+}
+*/
 
 void gk_pin_set_mode(gkPin pin, gkPinMode mode, gkPinAction level) {
     if (pin < GK_NUM_PINS && gk_pin_mode_setters[pin])
@@ -53,7 +48,7 @@ uint8_t gk_pin_read(gkPin pin) {
         return false;
 }
 
-void gk_pin_set_mode_simple(gkPin pin, gkPinMode mode, gkPinAction level) {
+void gk_pin_set_mode_simple(gkPin pin, gkPinMode mode, gkPinAction action) {
     uint8_t bit = digitalPinToBitMask(pin);
     uint8_t port = digitalPinToPort(pin);
     if (!port)
@@ -64,7 +59,7 @@ void gk_pin_set_mode_simple(gkPin pin, gkPinMode mode, gkPinAction level) {
     uint8_t SREG_orig = SREG;
     cli();
     gk_reg_setters[mode](mode_reg, bit);
-    gk_reg_setters[level](out_reg, bit);
+    gk_reg_setters[action](out_reg, bit);
     SREG = SREG_orig;
 }
 
@@ -81,36 +76,6 @@ uint8_t gk_pin_read_simple(gkPin pin) {
     uint8_t port = digitalPinToPort(pin);
     uint8_t bit = digitalPinToBitMask(pin);
     return !!(*portInputRegister(port) & bit);
-}
-
-void gk_pin_set_mode_inverted(gkPin pin, gkPinMode mode, gkPinAction level) {
-    uint8_t bit = digitalPinToBitMask(pin);
-    uint8_t port = digitalPinToPort(pin);
-    if (!port)
-        return;
-    volatile uint8_t* out_reg = portOutputRegister(port);
-    volatile uint8_t* mode_reg = portModeRegister(port);
-
-    uint8_t SREG_orig = SREG;
-    cli();
-    gk_reg_setters[mode](mode_reg, bit);
-    gk_reg_setters_inverted[level](out_reg, bit);
-    SREG = SREG_orig;
-}
-
-void gk_pin_write_inverted(gkPin pin, gkPinAction action) {
-    uint8_t bit = digitalPinToBitMask(pin);
-    volatile uint8_t* out = portOutputRegister(digitalPinToPort(pin));
-    uint8_t SREG_orig = SREG;
-    cli();
-    gk_reg_setters_inverted[action](out, bit);
-    SREG = SREG_orig;
-}
-
-gkPinValue gk_pin_read_inverted(gkPin pin) {
-    uint8_t port = digitalPinToPort(pin);
-    uint8_t bit = digitalPinToBitMask(pin);
-    return !(*portInputRegister(port) & bit);
 }
 
 void gk_reg_on(volatile uint8_t* reg, uint8_t bits) {

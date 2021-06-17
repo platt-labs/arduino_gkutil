@@ -3,80 +3,138 @@
 #include "schedule.h"
 #undef SCHEDULE_GLOBAL
 
-#define SCHEDULE_BUFFER_IND(x) ((sched.head + (x)) % SCHEDULE_BUFFER_SIZE)
+/*
+The event schedule is implemented as a dynamically-allocated singly-linked list.
+Initially I implemented it as a ring buffer, but when I realized that it would
+sometimes be necessary to remove items from the middle of the list rather than
+only from the front, it seemed easier and less error-prone to just use a linked
+list. Not sure if in the end, using a ring buffer is a better idea for
+performance reasons, but the linked list approach has worked for me on the
+Arduino in the past so hopefully it will hold up.
+*/
+
+typedef struct gkScheduleNode gkScheduleNode;
+
+struct gkScheduleNode {
+    gkScheduledEvent event;
+    gkScheduleNode *next;
+    gkScheduleNode *prev;
+};
+
+struct Schedule {
+    gkScheduleNode *head;
+    gkScheduleNode *tail;
+    uint8_t length;
+} sched = {0};
 
 uint8_t gk_schedule_add(gkTime time, gkPin pin, gkPinAction action) {
-    ScheduledEvent new_item = {time, pin, action};
-    uint8_t current_length = sched.length;
-
-    if (current_length) {
-        // Insertion sort based on scheduled time
-        uint8_t insertion_point = sched.head;
-        uint8_t i = current_length-1;
-        for (i; i >= 0; i--) {
-            uint8_t buffer_test_ind = SCHEDULE_BUFFER_IND(i);
-            uint8_t buffer_next_ind = SCHEDULE_BUFFER_IND(i+1);
-            if (sched.buffer[buffer_test_ind].time <= time) {
-                // We've found our position
-                insertion_point = buffer_next_ind;
-                break;
-            } else {
-                // Move the last item backwards and keep going
-                sched.buffer[buffer_next_ind] = sched.buffer[buffer_test_ind];
-            }
-        }
-        sched.buffer[insertion_point] = new_item;
-        sched.length += 1;
-        return i+1;
-    } else {
-        // No items scheduled, this is the new start
-        sched.buffer[0] = new_item;
-        sched.head = 0;
-        sched.length = 1;
-        return 0;
+    gkScheduleNode *new_node = (gkScheduleNode*)malloc(sizeof(gkScheduleNode));
+    if (!new_node) {
+        // Out of memory!
+        return 255;
     }
+    new_node->event.time = time;
+    new_node->event.pin = pin;
+    new_node->event.action = action;
+    new_node->next = 0;
+
+    if (sched.head) {
+        // This is not the only item in the schedule
+        gkScheduleNode *before = 0;
+        gkScheduleNode *after = sched.head;
+        while (after && after->event.time < time) {
+            before = after;
+            after = before->next;
+        }
+        // `after` is now the first node with a time greater than the new node's
+        // time, or null if the new node should be at the end, and `before` is
+        // the last node with a time less than the new node's time, or null if
+        // the new node should be at the start
+        new_node->next = after;
+        new_node->prev = before;
+        if (before) {
+            before->next = new_node;
+        } else {
+            sched.head = new_node;
+        }
+        if (after) {
+            after->prev = new_node;
+        } else {
+            sched.tail = new_node;
+        }
+        ++sched.length;
+    } else {
+        // This is now the only item in the schedule
+        sched.head = new_node;
+        sched.tail = new_node;
+        sched.length = 1;
+    }
+    return sched.length;
 }
 
 uint8_t gk_schedule_size() {
     return sched.length;
 }
 
-ScheduledEvent*const gk_schedule_get(uint8_t n) {
-    if (n < sched.length) {
-        uint8_t item_index = SCHEDULE_BUFFER_IND(n);
-        return &(sched.buffer[item_index]);
-    } else {
-        return NULL;
-    }
+gkScheduleIterator gk_schedule_head() {
+    return sched.head;
 }
 
-void gk_schedule_remove(uint8_t n) {
-    uint8_t current_length = sched.length;
-    if (n >= current_length)
+gkScheduleIterator gk_schedule_tail() {
+    return sched.tail;
+}
+
+gkScheduleIterator gk_schedule_next(gkScheduleIterator iter) {
+    if (iter)
+        return iter->next;
+    else
+        return 0;
+}
+
+gkScheduleIterator gk_schedule_prev(gkScheduleIterator iter) {
+    if (iter)
+        return iter->prev;
+    else
+        return 0;
+}
+
+gkScheduledEvent *const gk_schedule_get(gkScheduleIterator iter) {
+    if (iter)
+        return &(iter->event);
+    else
+        return 0;
+}
+
+void gk_schedule_remove(gkScheduleIterator iter) {
+    if (!iter)
         return;
-    for (int i = n; i < current_length-1; i++) {
-        // Copy the next item in the buffer to the current item
-        uint8_t buffer_this_ind = SCHEDULE_BUFFER_IND(i);
-        uint8_t buffer_next_ind = SCHEDULE_BUFFER_IND(i+1);
-        sched.buffer[buffer_this_ind] = sched.buffer[buffer_next_ind];
+    if (iter->prev) {
+        iter->prev->next = iter->next;
+    } else {
+        sched.head = iter->next;
     }
-    sched.length -= 1;
+    if (iter->next) {
+        iter->next->prev = iter->prev;
+    } else {
+        sched.tail = iter->prev;
+    }
+    free(iter);
 }
 
 void gk_schedule_execute() {
-    ScheduledEvent* next_item = &(sched.buffer[sched.head]);
+    gkScheduleNode *current = sched.head;
+    while (current && current->event.time <= millis()) {
+        gk_pin_write(current->event.pin, current->event.action);
 
-    while (sched.length && next_item->time <= millis()) {
-        gk_pin_write(next_item->pin, next_item->action);
-        if (sched.length > 1) {
-            sched.length--;
-            sched.head = SCHEDULE_BUFFER_IND(1);
-        } else {
-            sched.length = 0;
-            sched.head = 0;
-        }
-        next_item = &(sched.buffer[sched.head]);
+        sched.head = current->next;
+        --sched.length;
+        free(current);
+        current = sched.head;
     }
+    if (sched.head)
+        sched.head->prev = 0;
+    else
+        sched.tail = 0;
 }
 
 void gk_schedule_write_byte(
@@ -114,22 +172,22 @@ void gk_schedule_write_bytes(
         uint8_t* value ) {
     if (!when) {
         // Immediate write
-        gk_pin_write(pin, GK_PIN_SET_TOGGLE);
+        gk_pin_write(pin, GK_PIN_WRITE_TOGGLE);
         when = millis();
     } else {
-        gk_schedule_add(when, pin, GK_PIN_SET_TOGGLE);
+        gk_schedule_add(when, pin, GK_PIN_WRITE_TOGGLE);
     }
-    gk_schedule_add(when+bit_width, pin, GK_PIN_SET_TOGGLE);
+    gk_schedule_add(when+bit_width, pin, GK_PIN_WRITE_TOGGLE);
     when += bit_interval;
     for (uint8_t byte_ind=0; byte_ind < count; byte_ind++) {
         for (uint8_t bit_ind=0; bit_ind<8; bit_ind++) {
             if ( *(value+byte_ind) & (1 << bit_ind) ) {
-                gk_schedule_add(when, pin, GK_PIN_SET_TOGGLE);
-                gk_schedule_add(when+bit_width, pin, GK_PIN_SET_TOGGLE);
+                gk_schedule_add(when, pin, GK_PIN_WRITE_TOGGLE);
+                gk_schedule_add(when+bit_width, pin, GK_PIN_WRITE_TOGGLE);
             }
             when += bit_interval;
         }
     }
-    gk_schedule_add(when, pin, GK_PIN_SET_TOGGLE);
-    gk_schedule_add(when+bit_width, pin, GK_PIN_SET_TOGGLE);
+    gk_schedule_add(when, pin, GK_PIN_WRITE_TOGGLE);
+    gk_schedule_add(when+bit_width, pin, GK_PIN_WRITE_TOGGLE);
 }

@@ -45,7 +45,7 @@ void gk_modulation_setup(void) {
     gkPinMode orig_mode = (*mode_reg & pin_bit) ?
             GK_PIN_MODE_OUTPUT : GK_PIN_MODE_INPUT;
     gkPinAction orig_level = (*out_reg & pin_bit) ?
-            GK_PIN_SET_ON : GK_PIN_SET_OFF;
+            GK_PIN_WRITE_ON : GK_PIN_WRITE_OFF;
 
     // Threshold values could probably be calculated a little more flexibly
     // but this will work okay for now.
@@ -78,9 +78,9 @@ void gk_pin_set_mode_modulator(gkPin pin, gkPinMode mode, gkPinAction level) {
     volatile uint8_t* mode_reg = portModeRegister(port);
 
     gkPinAction timer_action = (mode==GK_PIN_MODE_OUTPUT) ?
-            GK_PIN_SET_OFF : level;
+            GK_PIN_WRITE_OFF : level;
     gkPinAction output_action = (mode==GK_PIN_MODE_INPUT) ?
-            level : GK_PIN_SET_OFF;
+            level : GK_PIN_WRITE_OFF;
 
     uint8_t SREG_orig = SREG;
     cli();

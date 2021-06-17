@@ -90,8 +90,12 @@ typedef gkPinValue gkPinReader(gkPin);
 // Set up the gkutil library
 void gk_setup(void);
 
-void gk_pin_configure_simple(gkPin);
-void gk_pin_configure_disabled(gkPin);
+void gk_pin_configure(gkPin, gkPinModeSetter*, gkPinWriter*, gkPinReader*);
+
+//void gk_pin_configure_simple(gkPin);
+//void gk_pin_configure_disabled(gkPin);
+
+#define gk_pin_disable(pin) gk_pin_configure(pin, 0, 0, 0)
 
 // Basic digital I/O functions. Will call the individual I/O handler function
 // for the specific pin requested.
@@ -104,6 +108,14 @@ void gk_pin_set_mode_simple(gkPin, gkPinMode, gkPinAction);
 void gk_pin_write_simple(gkPin, gkPinAction);
 gkPinValue gk_pin_read_simple(gkPin);
 
+#define gk_pin_configure_simple(pin) \
+    gk_pin_configure( \
+        pin, \
+        gk_pin_set_mode_simple, \
+        gk_pin_write_simple, \
+        gk_pin_read_simple \
+    )
+
 // Tables of pin digital I/O handlers
 #ifdef GKUTIL_GLOBAL
 gkPinModeSetter* gk_pin_mode_setters[GK_NUM_PINS] = {0};
@@ -115,6 +127,7 @@ extern gkPinWriter* gk_pin_writers[GK_NUM_PINS];
 extern gkPinReader* gk_pin_readers[GK_NUM_PINS];
 #endif
 
+/*
 inline
 gkPinModeSetter* gk_pin_set_mode_setter(gkPin pin, gkPinModeSetter* setter) {
     gkPinModeSetter* orig_setter = gk_pin_mode_setters[pin];
@@ -135,6 +148,7 @@ gkPinReader* gk_pin_set_reader(gkPin pin, gkPinReader* reader) {
     gk_pin_readers[pin] = reader;
     return orig_reader;
 }
+
 #ifdef GKUTIL_GLOBAL
 // Non-inlined declarations to force the compiler to produce symbols, per
 // the recommendation of Modern C
@@ -142,6 +156,7 @@ gkPinModeSetter* gk_pin_set_mode_setter(gkPin, gkPinModeSetter*);
 gkPinWriter* gk_pin_set_writer(gkPin, gkPinWriter*);
 gkPinReader* gk_pin_set_reader(gkPin, gkPinReader*);
 #endif
+*/
 
 // Utility functions to flexibly change register values
 typedef void gkRegSetter(volatile uint8_t*, uint8_t);

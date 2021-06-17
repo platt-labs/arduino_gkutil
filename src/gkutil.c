@@ -7,6 +7,17 @@ void gk_setup(void) {
     // We don't actually need to do anything here
 }
 
+void gk_pin_configure(
+    gkPin pin,
+    gkPinModeSetter *setter,
+    gkPinWriter *writer,
+    gkPinReader *reader
+) {
+    gk_pin_mode_setters[pin] = setter;
+    gk_pin_writers[pin] = writer;
+    gk_pin_readers[pin] = reader;
+}
+/*
 void gk_pin_configure_simple(gkPin pin) {
     gk_pin_set_mode_setter(pin, &gk_pin_set_mode_simple);
     gk_pin_set_writer(pin, &gk_pin_write_simple);
@@ -18,6 +29,7 @@ void gk_pin_configure_disabled(gkPin pin) {
     gk_pin_set_writer(pin, (void*)0);
     gk_pin_set_reader(pin, (void*)0);
 }
+*/
 
 void gk_pin_set_mode(gkPin pin, gkPinMode mode, gkPinAction level) {
     if (pin < GK_NUM_PINS && gk_pin_mode_setters[pin])

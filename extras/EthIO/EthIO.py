@@ -46,8 +46,8 @@ class NoResponseError(Exception):
     pass
 
 class EthIO:
-    def __init__(self, port, baudrate=115200, timeout=0.1):
-        self.device = serial.Serial(
+    def __init__(self, port=None, baudrate=115200, timeout=0.1):
+        self._io = serial.Serial(
             port=port,
             baudrate=baudrate,
             timeout=timeout
@@ -57,11 +57,27 @@ class EthIO:
         self._ready_message = ""
 
     @property
+    def port(self):
+        return self._io.port
+    @port.setter
+    def port(self, new_port):
+        self._io.port = new_port
+
+    def open(self):
+        self._io.open()
+
+    def close(self):
+        self._io.close()
+        self._is_ready = False
+        self._ready_message = ""
+        self._responders = []
+
+    @property
     def is_ready(self):
         if self._is_ready:
             return True
         # Check if the device has reported in
-        self._ready_message += self.device.read_until().decode()
+        self._ready_message += self._io.read_until().decode()
         if self._ready_message and self._ready_message[-1] == "\n":
             self._is_ready = True
         return self._is_ready
@@ -73,14 +89,14 @@ class EthIO:
         else:
             msg = msg_start['config_output']
         msg += pin.to_bytes(1, byteorder='big')
-        self.device.write(msg)
+        self._io.write(msg)
 
     @require_ready
     def pulse(self, pin, duration=10):
         msg = msg_start['pulse']
         msg += pin.to_bytes(1, byteorder='big')
         msg += duration.to_bytes(2, byteorder='big')
-        self.device.write(msg)
+        self._io.write(msg)
 
     @require_ready
     def pulse_after(self, pin, duration=10, delay=1):
@@ -88,7 +104,7 @@ class EthIO:
         msg += pin.to_bytes(1, byteorder='big')
         msg += delay.to_bytes(2, byteorder='big')
         msg += duration.to_bytes(2, byteorder='big')
-        self.device.write(msg)
+        self._io.write(msg)
 
     @require_ready
     def pulse_train(self, pin, intervals):
@@ -101,13 +117,13 @@ class EthIO:
         else:
             msg = msg_start['config_input_nopullup']
         msg += pin.to_bytes(1, byteorder='big')
-        self.device.write(msg)
+        self._io.write(msg)
 
     @require_ready
     def read_pin(self, pin):
         msg = msg_start['read_pin']
         msg += pin.to_bytes(1, byteorder='big')
-        self.device.write(msg)
+        self._io.write(msg)
         new_response = EthIOResponse(self, 1, convert_pin_input)
         self._responders.append(new_response)
         return new_response
@@ -115,7 +131,7 @@ class EthIO:
     @require_ready
     def get_clock(self):
         msg = msg_start['get_clock']
-        self.device.write(msg)
+        self._io.write(msg)
         new_response = EthIOResponse(self, 4, convert_time_ms)
         self._responders.append(new_response)
         return new_response
@@ -123,7 +139,7 @@ class EthIO:
     @require_ready
     def get_last_clock(self):
         msg = msg_start['get_last_clock']
-        self.device.write(msg)
+        self._io.write(msg)
         new_response = EthIOResponse(self, 4, convert_time_ms)
         self._responders.append(new_response)
         return new_response
@@ -131,11 +147,13 @@ class EthIO:
     @require_ready
     def get_schedule_size(self):
         msg = msg_start['get_schedule_size']
-        self.device.write(msg)
+        self._io.write(msg)
         new_response = EthIOResponse(self, 1, convert_int)
         self._responders.append(new_response)
         return new_response
 
+# Not sure this is the best way to implement this; seems a bit sketchy to let
+# the EthIOResponse control the EthIO's queue and its siblings.
 class EthIOResponse:
     def __init__(self, ethio, num_bytes, converter):
         self.ethio = ethio
@@ -144,20 +162,31 @@ class EthIOResponse:
         self.raw_data = bytes()
         self._value = None
         self._is_ready = False
+        self._is_defunct = False
 
     @property
     def is_ready(self):
         if self._is_ready:
             return True
-        while self.ethio._responders[0] is not self:
-            # There are other EthIOReponses queued ahead of this one.
-            # Check if the first one in the queue is ready until we either find
-            # one that's not, or we exhaust the queue ahead of this one.
-            if not self.ethio._responders[0].is_ready:
-                return False
+        if self._is_defunct:
+            return False
+        try:
+            while self.ethio._responders[0] is not self:
+                # There are other EthIOReponses queued ahead of this one. Check
+                # if the first one in the queue is ready until we either find
+                # one that's not, or we exhaust the queue ahead of this one.
+                if not self.ethio._responders[0].is_ready:
+                    return False
+        except IndexError:
+            # If we hit this, it means we made it to the end of the _responders
+            # queue without encountering this EthIOResponse. That means
+            # something went wrong (maybe the connection was closed) and this
+            # EthIOResponse is defunct.
+            self._is_defunct = True
+            return False
         # This EthIOResponse is the next in the queue. Check if it's available.
         bytes_remaining = self.num_bytes - len(self.raw_data)
-        self.raw_data += self.ethio.device.read(bytes_remaining)
+        self.raw_data += self.ethio._io.read(bytes_remaining)
         if len(self.raw_data) == self.num_bytes:
             # We have now read the entire reply for this one
             self._value = self.converter(self.raw_data)

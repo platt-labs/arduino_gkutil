@@ -73,6 +73,10 @@ class EthIO:
         self._responders = []
 
     @property
+    def is_open(self):
+        return self._io.is_open
+
+    @property
     def is_ready(self):
         if self._is_ready:
             return True
